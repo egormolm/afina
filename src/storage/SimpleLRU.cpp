@@ -5,8 +5,24 @@ namespace Afina {
 
 // See MapBasedGlobalLockImpl.h
         bool SimpleLRU::Put(const std::string &key, const std::string &value) {
-            //lru_node *node = new lru_node(key, value, _lru_end);
-            _lru_index[key] = *(new std::reference_wrapper<lru_node>(*(new lru_node(key, value, _lru_end))));
+            lru_node *node = new lru_node(key, value, _lru_end);
+            //_lru_index[key] = *new std::reference_wrapper<lru_node>(*node);не работает хз почему
+            auto res = _lru_index.insert(std::make_pair(std::reference_wrapper<const std::string>(key),
+                                                        std::reference_wrapper<lru_node>(*node)));
+            if (!res.second) {
+                std::size_t length = value.size();
+                if (length > _max_size) {
+                    return false;
+                }
+                _size -= res.first->second.get().value.size();
+                _size += length;
+                while (length + _size > _max_size) {
+                    Delete(_lru_head->key);
+                    _del_from_list(*_lru_head);
+                }
+                res.first->second.get().value = value;
+                return true;
+            }
             _add_to_list(key, value);
             return true;
         }
@@ -16,9 +32,10 @@ namespace Afina {
             if (_lru_index.find(key) != _lru_index.end()) {
                 return false;
             }
-            _lru_index[key] = *(new std::reference_wrapper<lru_node>(*(new lru_node(key, value, _lru_end))));
-            _add_to_list(key, value);
-            return true;
+            lru_node *node = new lru_node(key, value, _lru_end);
+            _lru_index.insert(std::make_pair(std::reference_wrapper<const std::string>(key),
+                                             std::reference_wrapper<lru_node>(*node)));
+            return _add_to_list(key, value);
         }
 
 // See MapBasedGlobalLockImpl.h
@@ -46,11 +63,15 @@ namespace Afina {
 
 // See MapBasedGlobalLockImpl.h
         bool SimpleLRU::Get(const std::string &key, std::string &value) const {
-            //??????
-            return false;
+            auto it = _lru_index.find(key);
+            if (it == _lru_index.end()) {
+                return false;
+            }
+            return true;
+            //return _add_to_list(key, value);
         }
 
-        bool SimpleLRU::_del_from_list(lru_node &node) {
+        void SimpleLRU::_del_from_list(lru_node &node) {
             std::size_t length = node.key.size() + node.value.size();
             _size -= length;
             if (node.next != nullptr) {
@@ -64,7 +85,6 @@ namespace Afina {
                 _lru_head.swap(node.next);
             }
             node.next.reset();
-            return true;
         }
 
 
@@ -80,10 +100,10 @@ namespace Afina {
             _size += length;
             if (_lru_end != nullptr) {
                 _lru_end->next.reset(new lru_node(key, value, _lru_end));
-                _lru_end.reset(_lru_end->next.get());
+                _lru_end = _lru_end->next.get();
             } else {
                 _lru_head.reset(new lru_node(key, value, _lru_end));
-                _lru_end.reset(_lru_head.get());
+                _lru_end = _lru_head.get();
             }
             return true;
         }

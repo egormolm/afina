@@ -22,9 +22,9 @@ public:
     ~SimpleLRU() {
         _lru_index.clear();
         while (_lru_head->next != nullptr) {
-            auto tmp = _lru_head->next->prev;
-            tmp->prev.reset();
+            lru_node * tmp = _lru_head->next->prev;
             _lru_head.swap(_lru_head->next);
+            tmp->next.reset();
         }
         _lru_head.reset();
     }
@@ -49,11 +49,11 @@ private:
     using lru_node = struct lru_node {
         std::string key;
         std::string value;
-        std::shared_ptr<lru_node> prev;
+        lru_node* prev;
         std::unique_ptr<lru_node> next;
 
-        lru_node(const std::string &key, const std::string &value, std::shared_ptr<lru_node> prev):
-        key(key), value(value), prev(prev), next(nullptr) {}
+        lru_node(const std::string &key, const std::string &value, lru_node* prev):
+        key(key), value(value), prev(prev) {next=nullptr; }
     };
 
     // Maximum number of bytes could be stored in this cache.
@@ -66,11 +66,11 @@ private:
     //
     // List owns all nodes
     std::unique_ptr<lru_node> _lru_head;
-    std::shared_ptr<lru_node> _lru_end;
+    lru_node* _lru_end;
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>> _lru_index;
+    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
 
-    bool _del_from_list(lru_node &node);
+    void _del_from_list(lru_node &node);
     bool _add_to_list(const std::string &key, const std::string &value);
 };
 
